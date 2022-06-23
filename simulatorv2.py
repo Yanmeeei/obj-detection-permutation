@@ -1,7 +1,7 @@
 from device import Device
 import pandas as pd
 from layer import Layer
-
+from itertools import combinations_with_replacement
 
 class Simulator(object):
 
@@ -11,7 +11,6 @@ class Simulator(object):
                  bandwidth=200,
                  device_names=None,
                  priority_filename=None,
-                 part_filename=None,
                  ignore_latency=False):
         super().__init__()
         self.bandwidth = bandwidth
@@ -39,14 +38,13 @@ class Simulator(object):
         parallel = True
         print(f"Device parallel = {parallel}")
         if device_names is None:
-            # TODO: should #device determined by prof?
             self.device_names = [str(i) for i in range(len(prof_filenames))]
         for name, prof_filename in zip(self.device_names, prof_filenames):
             self.devices[name] = Device(name, prof_filename, parallel=parallel)
 
         # load dependencies and initialize all Layers
         self.load_dependencies(dep_filename)
-        self.load_macs_size(prof_filename)
+        self.load_macs_size(prof_filenames)
 
         # if priority file is not given, init with even priorities
         if priority_filename is not None:
@@ -55,19 +53,22 @@ class Simulator(object):
             for name in list(self.layers.keys()):
                 self.priorities[name] = 1
 
-        self.load_partitions(part_filename)  # Intermediate result of partition, now load from handcoded csv
-        # self.partition(part_filename)
-
         print(self.device_names)
         for device in list(self.devices.values()):
-            # TODO: Now exec has not much to do with assigned layers
             print(f"Device name: {device.name}, with layers: {device.assigned_layer}")
         print("{:<15} {:<15}".format("layer", "device"))
         for layer in list(self.layers.values()):
             print("{:<15} {:<15}".format(layer.name, layer.device_id))
         print(f"Layer priority: {self.priorities}")
 
-        self.simulate()
+        num_layers = len(self.layers)
+        comb = combinations_with_replacement(list(range(0, len(prof_filenames)-1, 1)), num_layers)
+
+        for c in comb:
+            self.load_partitions(c)
+            self.simulate()
+        print(max(self.results))
+
 
     def load_dependencies(self, dep_filename):
         """
@@ -88,7 +89,6 @@ class Simulator(object):
             self.layers[dst].dependencies.append(src)
 
     def load_macs_size(self, prof_filename):
-        # TODO: Here size is with layers. If necessary, can be with dependencies.
         df_list = pd.read_csv(prof_filename).values.tolist()
         for layername, time, cpu, cuda, size, macs in df_list:
             self.layers[layername].size = size
@@ -100,11 +100,12 @@ class Simulator(object):
             self.priorities[layername] = priority
             self.layers[layername].pr_max = priority
 
-    def load_partitions(self, part_filename):
-        partitions = pd.read_csv(part_filename).values.tolist()
-        for layername, device_id in partitions:
-            self.layers[layername].device_id = str(device_id)
-            self.devices[str(device_id)].assigned_layer.append(layername)
+    def load_partitions(self, comb_list):
+        """
+        """
+        for layer_name, layer, device_id in zip(self.layers.items(), comb_list):
+            self.layers[layer_name].device_id = str(device_id)
+            self.devices[str(device_id)].assigned_layer.append(layer_name)
 
     def clean_up(self):
         for name, layer in self.layers.items():
@@ -171,8 +172,6 @@ class Simulator(object):
                 transfer_latency = 0
                 if (not self.ignore_latency) and str(dep_layer.device_id) != device.name:
                     transfer_latency = dep_layer.size / self.bandwidth
-                    if dep == "d3_conv1":
-                        a = 1
                 print(f"Receiving layer {dep} data from device {dep_layer.device_id}, "
                       f"starting at {dep_layer.end_time:.4f}, latency {transfer_latency}.")
                 end_time = dep_layer.end_time + transfer_latency
@@ -198,6 +197,7 @@ class Simulator(object):
                     continue
                 if next_layer_name == "output":
                     self.time_result[cur_layer_name] = cur_layer.end_time
+                    self.results.append(cur_layer.end_time)
                     continue
                 self.device_exec(next_layer_name)
 
@@ -216,11 +216,6 @@ class Simulator(object):
         for key, value in self.time_result.items():
             print("{:<15} {:<15,.5f}".format(key, value))
 
-        # print(f"\n\033[30;42m=========Time Result per Device=========\033[0m")
-        # print("{:<15} {:<15}".format("device", "time (s)"))
-        # for key, value in self.time_result_seg.items():
-        #     print("{:<15} {:<15,.5f}".format(key, value))
-
         print(f"\n\033[30;42m=========Mem Result=========\033[0m")
         print("{:<15} {:<15} {:<15} {:<15} {:<15}".format("device", "cpu sum (MB)", "cpu peak (MB)", "cuda sum (MB)",
                                                           "cuda peak (MB)"))
@@ -231,4 +226,3 @@ class Simulator(object):
         print("{:<15} {:<15} {:<15}".format("device", "macs sum (M)", "macs peak (M)"))
         for name, device in self.devices.items():
             device.get_macs()
-        # print(self.results)
