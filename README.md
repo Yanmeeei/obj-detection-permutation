@@ -16,6 +16,8 @@ There is no need to shift data between devices during a chain-like sequential st
 
 ### 3. Re-run with previous partial result
 
+Tool feadback screenshot: #device = 2, bandwidth = 1280Mbps
+This image is the feedback after half an hour, progress < 0.5%
 ![This image is the feedback after half an hour, progress < 0.5%](Readme_0.png "Tool feadback, #device = 2, bandwidth = 1280Mbps")
 
 As shown in the image above, while the optimal for the whole network has not been reached, the device assignment strategy for the last several layers is fixed. Re-run the tool with those fixed assignment, and it is assumed that optimal is found. 
