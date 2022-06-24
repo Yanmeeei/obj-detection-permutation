@@ -6,6 +6,7 @@ class Layer(object):
         self.explored = False
         self.waiting = False
         self.completed = False
+        self.fixed = False
 
         # Updated through init of simulator
         self.dependencies = []  # all sources to this layer

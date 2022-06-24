@@ -14,8 +14,9 @@ Simulator(
         # "prof.csv",
         # "prof.csv",
     ],
+    partition_filename="part.csv",
     bandwidth=1280,
     ignore_latency=False,
     detailed=False,
-    feedback_interval=0.001,
+    feedback_interval=0.05,
 )

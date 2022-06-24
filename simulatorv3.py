@@ -12,6 +12,7 @@ class Simulator(object):
                  bandwidth=200,
                  device_names=None,
                  priority_filename=None,
+                 partition_filename=None,
                  ignore_latency=False,
                  detailed=False,
                  feedback_interval=0.1):
@@ -49,6 +50,7 @@ class Simulator(object):
 
         # load dependencies and initialize all Layers
         self.load_dependencies(dep_filename)
+        num_layer_flexible = self.fix_partitions(partition_filename) if partition_filename is not None else len(self.layers)
 
         # if priority file is not given, init with even priorities
         if priority_filename is not None:
@@ -59,11 +61,10 @@ class Simulator(object):
 
         self.load_macs_size(prof_filenames[0])
 
-        num_layers = len(self.layers)
         device_list = list(range(0, len(prof_filenames), 1))
-        comb = product(device_list, repeat=num_layers)
+        comb = product(device_list, repeat=num_layer_flexible)
         num_iter = 0
-        total_iter = len(prof_filenames) ** num_layers
+        total_iter = len(prof_filenames) ** num_layer_flexible
         progress = 0
         best_assignment = None
         for c in comb:
@@ -78,6 +79,7 @@ class Simulator(object):
             if self.cur_result < self.best_result:
                 self.best_result = self.cur_result
                 best_assignment = c
+                print(f"{c}, {self.cur_result:.6f}")
 
         self.load_partitions(best_assignment)
         print(f"\n==>>Best result: {self.best_result} s")
@@ -118,10 +120,24 @@ class Simulator(object):
             self.priorities[layername] = priority
             self.layers[layername].pr_max = priority
 
+    def fix_partitions(self, partition_filename):
+        num_layer_flexible = 0
+        partitions = pd.read_csv(partition_filename).values.tolist()
+        for layername, device_id in partitions:
+            if device_id != -1:
+                self.layers[layername].device_id = str(device_id)
+                self.layers[layername].fixed = True
+            else:
+                num_layer_flexible += 1
+        return num_layer_flexible
+
     def load_partitions(self, comb_list):
-        """
-        """
-        for (layer_name, layer), device_id in zip(self.layers.items(), comb_list):
+        layer_name_flexible = []
+        for layer_name, layer in self.layers.items():
+            if not self.layers[layer_name].fixed:
+                layer_name_flexible.append(layer_name)
+
+        for layer_name, device_id in zip(layer_name_flexible, comb_list):
             self.layers[layer_name].device_id = str(device_id)
             self.devices[str(device_id)].assigned_layer.append(layer_name)
 
